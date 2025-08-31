@@ -1,5 +1,5 @@
 # Base image avec Node et Playwright
-FROM mcr.microsoft.com/playwright:v1.44.0-focal
+FROM mcr.microsoft.com/playwright:v1.55.0-focal
 
 WORKDIR /app
 
