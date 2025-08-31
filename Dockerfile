@@ -8,7 +8,7 @@ COPY package*.json ./
 RUN npm install
 
 # Copier le code
-COPY . .
+COPY ./index.js ./
 
 # Exposer le port pour l’API
 EXPOSE 3000
