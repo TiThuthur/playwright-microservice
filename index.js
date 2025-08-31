@@ -6,54 +6,125 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 
-// Fonction pour parser et séparer le HTML
+// Fonction pour parser et décortiquer le body HTML
 function parseHTML(html) {
-  const sections = {
-    head: "",
-    body: "",
-    title: "",
-    meta: [],
-    links: [],
-    scripts: [],
+  // Extraire uniquement la section body
+  const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  if (!bodyMatch) {
+    return { body: "", elements: {} };
+  }
+
+  const bodyContent = bodyMatch[1].trim();
+
+  // Objet pour stocker tous les éléments trouvés
+  const elements = {
+    headings: [], // h1, h2, h3, h4, h5, h6
+    paragraphs: [], // p
+    lists: [], // ul, ol, li
+    tables: [], // table, tr, td, th
+    divs: [], // div
+    spans: [], // span
+    sections: [], // section, article, aside, nav, header, footer
+    media: [], // video, audio, iframe
+    other: [], // autres balises
   };
 
-  // Extraire le titre
-  const titleMatch = html.match(/<title[^>]*>([^<]*)<\/title>/i);
-  if (titleMatch) {
-    sections.title = titleMatch[1].trim();
+  // Extraire les titres (h1-h6)
+  const headingMatches = bodyContent.match(
+    /<(h[1-6])[^>]*>([^<]*)<\/h[1-6]>/gi
+  );
+  if (headingMatches) {
+    elements.headings = headingMatches.map((match) => {
+      const tagMatch = match.match(/<(h[1-6])[^>]*>([^<]*)<\/h[1-6]>/i);
+      return {
+        tag: tagMatch[1],
+        text: tagMatch[2].trim(),
+        full: match,
+      };
+    });
   }
 
-  // Extraire les balises meta
-  const metaMatches = html.match(/<meta[^>]*>/gi);
-  if (metaMatches) {
-    sections.meta = metaMatches;
+  // Extraire les paragraphes
+  const paragraphMatches = bodyContent.match(
+    /<p[^>]*>([^<]*(?:<[^>]*>[^<]*<\/[^>]*>[^<]*)*)<\/p>/gi
+  );
+  if (paragraphMatches) {
+    elements.paragraphs = paragraphMatches.map((match) => {
+      const textMatch = match.match(/<p[^>]*>([\s\S]*?)<\/p>/i);
+      return {
+        text: textMatch[1].replace(/<[^>]*>/g, "").trim(),
+        full: match,
+      };
+    });
   }
 
-  // Extraire les liens
-  const linkMatches = html.match(/<link[^>]*>/gi);
-  if (linkMatches) {
-    sections.links = linkMatches;
+  // Extraire les listes
+  const listMatches = bodyContent.match(/<(ul|ol)[^>]*>[\s\S]*?<\/(ul|ol)>/gi);
+  if (listMatches) {
+    elements.lists = listMatches.map((match) => {
+      const listTypeMatch = match.match(/<(ul|ol)[^>]*>/i);
+      const listItems = match.match(
+        /<li[^>]*>([^<]*(?:<[^>]*>[^<]*<\/[^>]*>[^<]*)*)<\/li>/gi
+      );
+      return {
+        type: listTypeMatch[1],
+        items: listItems
+          ? listItems.map((item) => {
+              const textMatch = item.match(/<li[^>]*>([\s\S]*?)<\/li>/i);
+              return textMatch[1].replace(/<[^>]*>/g, "").trim();
+            })
+          : [],
+        full: match,
+      };
+    });
   }
 
-  // Extraire les scripts
-  const scriptMatches = html.match(/<script[^>]*>[\s\S]*?<\/script>/gi);
-  if (scriptMatches) {
-    sections.scripts = scriptMatches;
+  // Extraire les tableaux
+  const tableMatches = bodyContent.match(/<table[^>]*>[\s\S]*?<\/table>/gi);
+  if (tableMatches) {
+    elements.tables = tableMatches.map((match) => {
+      const rows = match.match(/<tr[^>]*>[\s\S]*?<\/tr>/gi);
+      return {
+        rows: rows ? rows.length : 0,
+        full: match,
+      };
+    });
   }
 
-  // Extraire la section head
-  const headMatch = html.match(/<head[^>]*>([\s\S]*?)<\/head>/i);
-  if (headMatch) {
-    sections.head = headMatch[1].trim();
+  // Extraire les divs
+  const divMatches = bodyContent.match(/<div[^>]*>[\s\S]*?<\/div>/gi);
+  if (divMatches) {
+    elements.divs = divMatches.map((match) => {
+      const classMatch = match.match(/class=["']([^"']*)["']/i);
+      const idMatch = match.match(/id=["']([^"']*)["']/i);
+      return {
+        class: classMatch ? classMatch[1] : "",
+        id: idMatch ? idMatch[1] : "",
+        full: match,
+      };
+    });
   }
 
-  // Extraire la section body
-  const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-  if (bodyMatch) {
-    sections.body = bodyMatch[1].trim();
+  // Extraire les sections principales
+  const sectionMatches = bodyContent.match(
+    /<(section|article|aside|nav|header|footer)[^>]*>[\s\S]*?<\/(section|article|aside|nav|header|footer)>/gi
+  );
+  if (sectionMatches) {
+    elements.sections = sectionMatches.map((match) => {
+      const tagMatch = match.match(
+        /<(section|article|aside|nav|header|footer)[^>]*>/i
+      );
+      return {
+        tag: tagMatch[1],
+        full: match,
+      };
+    });
   }
 
-  return sections;
+  return {
+    body: bodyContent,
+    elements: elements,
+  };
 }
 
 // Debug route pour tester le service
@@ -88,8 +159,8 @@ app.post("/scrape", async (req, res) => {
 
     res.json({
       url: url,
-      html: content,
-      sections: parsedHTML,
+      body: parsedHTML.body,
+      elements: parsedHTML.elements,
     });
   } catch (err) {
     console.error("Scraping error:", err.message);
